@@ -12,17 +12,46 @@ Real-Time Preview。图像数据通过内存管道与本地 Python/ONNX 后端�
 
 ## 当前发布状态
 
-本仓库公开 PCL 源码、构建脚本、测试脚本和 PixInsight 更新源描述文件。公开二进制
-发行版需要有效的 Certified PixInsight Developer（CPD）代码签名。开发者本机生成的
-Local Signing Identity 仅适合本地开发和测试。
+本仓库公开 PCL 源码、构建脚本、测试脚本和安装文档。项目自研的三个 ONNX 模型与
+精简运行时通过 GitHub Release 资产分发，避免将大型二进制写入 Git 历史。
 
-Git 历史不保存 ONNX 模型、应用运行时、`.xssk` 私钥、`.xsgn` 签名或生成的二进制。
-获得相应分发授权后，完整后端由发布脚本打包为 GitHub Release 资产。详细范围参见
-[NOTICE.md](NOTICE.md)。
+当前公开版本为 Local Signing Edition。每位用户使用自己的 PixInsight Local Signing
+Identity 在本机签名 DLL，即可安装完整的三个 Process 和 Real-Time Preview。
+标准 Manage Repositories 一键安装仍需要 Certified PixInsight Developer（CPD）签名。
+详细范围参见 [NOTICE.md](NOTICE.md)。
 
 ## 用户安装
 
-取得 CPD 签名并发布 GitHub Release 后，用户可直接通过 PixInsight 更新系统安装：
+### Local Signing Edition
+
+1. 从 [GitHub Releases](https://github.com/Indigo2233/3XT-ALT/releases) 下载：
+
+   - `XTAlt-<版本>-local-windows-x64.zip`
+   - `SHA256SUMS-local.txt`
+
+2. 校验 SHA-256，解压 ZIP。
+3. 创建并注册自己的 PixInsight Local Signing Identity。
+4. 退出 PixInsight，在解压目录运行：
+
+   ```powershell
+   .\install-local.ps1 -KeysFile "C:\path\PixInsight-local-signing.xssk"
+   ```
+
+5. 在密码窗口中亲自输入签名密码。
+6. 启动 PixInsight，在 `Process > Modules > Install Modules` 中选择：
+
+   ```text
+   %LOCALAPPDATA%\Programs\XTAlt
+   ```
+
+7. 重启 PixInsight，在 `Process > XTAlt` 中打开三个 Process。
+
+适合交给 Codex 或其他本地编程代理执行的完整规范位于 [AGENTS.md](AGENTS.md)，
+人工安装与验证步骤位于 [docs/INSTALL.zh-CN.md](docs/INSTALL.zh-CN.md)。
+
+### Manage Repositories
+
+取得 CPD 签名后，用户可以通过 PixInsight 更新系统安装：
 
 1. 打开 `Resources > Updates > Manage Repositories`。
 2. 添加以下仓库 URL，保留末尾的 `/`：
@@ -44,8 +73,6 @@ Git 历史不保存 ONNX 模型、应用运行时、`.xssk` 私钥、`.xsgn` 签
 ```text
 %LOCALAPPDATA%\Programs\老佛爷的三件套
 ```
-
-完整说明参见 [docs/INSTALL.zh-CN.md](docs/INSTALL.zh-CN.md)。
 
 ## 源码构建
 
@@ -80,6 +107,19 @@ Windows x64 构建要求：
 `.xssk` 文件包含私钥，应始终保存在仓库之外。
 
 ## 生成公共发行包
+
+### Local Signing Edition
+
+确认模型公开分发授权后执行：
+
+```powershell
+.\package-local-release.ps1 -Version 1.0.1 -ModelDistributionAuthorized
+.\publish-local-release.ps1 -Version 1.0.1 -ConfirmPublicRelease
+```
+
+发布包不包含 `.xsgn`，每位用户在本机运行 `install-local.ps1` 生成自己的签名。
+
+### CPD / Manage Repositories
 
 使用 CPD 身份签名 DLL，并确认模型具备公开分发授权后执行：
 

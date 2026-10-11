@@ -1,8 +1,62 @@
 # 3XT-ALT 安装说明
 
+## Local Signing Edition
+
+此流程适用于当前公开 GitHub Release，无需 Visual Studio、Python 或源码编译。
+
+### 1. 下载和校验
+
+从以下页面下载 ZIP 与校验文件：
+
+```text
+https://github.com/Indigo2233/3XT-ALT/releases
+```
+
+在下载目录执行：
+
+```powershell
+$expected = (Get-Content .\SHA256SUMS-local.txt).Split()[0]
+$actual = (Get-FileHash .\XTAlt-*-local-windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actual -ne $expected) { throw 'SHA-256 mismatch' }
+```
+
+### 2. 创建本地签名身份
+
+1. 在 PixInsight 中执行标准 `SigningKeys` 脚本：
+
+   ```text
+   C:\Program Files\PixInsight\src\scripts\SigningKeys\SigningKeys.js
+   ```
+
+2. 保存 `.xssk` 私钥文件，并在 `Edit > Local Signing Identity` 中注册。
+3. `.xssk` 路径应只包含 ASCII 字符，以兼容 Windows 命令行签名接口。
+4. 私钥和密码不得上传或发送给其他人。
+
+### 3. 本地签名和复制
+
+完全退出 PixInsight，在解压目录运行：
+
+```powershell
+.\install-local.ps1 -KeysFile "C:\path\PixInsight-local-signing.xssk"
+```
+
+PixInsight 会打开密码窗口。输入密码并确认后，脚本会把完整安装复制到：
+
+```text
+%LOCALAPPDATA%\Programs\XTAlt
+```
+
+### 4. 注册 Process
+
+1. 启动 PixInsight。
+2. 打开 `Process > Modules > Install Modules`。
+3. 选择 `%LOCALAPPDATA%\Programs\XTAlt`。
+4. 完成扫描并重启 PixInsight。
+5. 在 `Process > XTAlt` 中确认 `BXTAlt`、`SXTAlt`、`NXTAlt`。
+
 ## 通过 Manage Repositories 安装
 
-此流程适用于带有有效 CPD 签名的正式发行版。
+此流程预留给带有有效 CPD 签名的正式发行版。当前 Local Signing Edition 使用上方流程。
 
 1. 在 PixInsight 中打开 `Resources > Updates > Manage Repositories`。
 2. 添加以下 URL，保留末尾的 `/`：
@@ -69,8 +123,8 @@ Script > Execute Script File
 
 ### 签名验证失败
 
-公开发行包需要 CPD 签名。Local Signing Identity 生成的签名用于签名者本地
-开发环境。
+确认签名由当前电脑上的 PixInsight Local Signing Identity 生成。每次 DLL 更新后都要
+重新运行 `install-local.ps1`。其他许可证生成的本地签名无法在当前许可证上验证。
 
 ### 无法定位后端
 

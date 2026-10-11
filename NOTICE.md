@@ -11,11 +11,12 @@ The following items are intentionally excluded from Git history:
 - signatures created with a Local Signing Identity
 - generated binaries and build caches
 
-Self-contained GitHub Release assets may include the inference runtime and model files
-only when the publisher has confirmed the necessary redistribution rights. The release
-packager requires this confirmation explicitly. Product names and trademarks belong to
-their respective owners.
+The InDeConv, InDeNoise, and InDeStars models are developed by the project owner and
+may be distributed in official 3XT-ALT GitHub Release assets. The release packager
+requires an explicit distribution confirmation. Product names and trademarks belong
+to their respective owners.
 
-A public binary release of this module requires a valid Certified PixInsight
-Developer code signature. Local developer signatures are intended for development
-and testing on the signing installation.
+A module distributed for installation on arbitrary PixInsight licenses requires a
+valid Certified PixInsight Developer code signature. The Local Signing Edition ships
+an unsigned module binary; each user generates a signature with their own PixInsight
+Local Signing Identity before installation.
