@@ -20,6 +20,9 @@ Identity 在本机签名 DLL，即可安装完整的三个 Process 和 Real-Time
 标准 Manage Repositories 一键安装仍需要 Certified PixInsight Developer（CPD）签名。
 详细范围参见 [NOTICE.md](NOTICE.md)。
 
+桌面版附带的 Siril 脚本使用模型名称命名：`InDeConv.py`、`InDeStars.py` 和
+`InDeNoise.py`，分别对应反卷积、去星和降噪功能。
+
 ## 用户安装
 
 ### Local Signing Edition
