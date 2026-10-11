@@ -9,7 +9,19 @@ param(
     [Parameter(Mandatory)]
     [string]$SignaturePath,
 
-    [switch]$CpdSigned
+    [string]$BackendRoot,
+
+    [string]$RepositoryOwner = 'Indigo2233',
+
+    [string]$RepositoryName = '3XT-ALT',
+
+    [string]$ReleaseTag,
+
+    [switch]$CpdSigned,
+
+    [switch]$ModelDistributionAuthorized,
+
+    [switch]$OverwriteSignedRepository
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,9 +30,18 @@ $moduleRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ([string]::IsNullOrWhiteSpace($DllPath)) {
     $DllPath = Join-Path $moduleRoot 'build\bin\XTAlt-pxm.dll'
 }
+if ([string]::IsNullOrWhiteSpace($BackendRoot)) {
+    $BackendRoot = Split-Path -Parent $moduleRoot
+}
+if ([string]::IsNullOrWhiteSpace($ReleaseTag)) {
+    $ReleaseTag = "v$Version"
+}
 
 if (-not $CpdSigned) {
-    throw 'Public release packaging requires an explicit -CpdSigned confirmation.'
+    throw 'Public PixInsight module releases require an explicit -CpdSigned confirmation.'
+}
+if (-not $ModelDistributionAuthorized) {
+    throw 'Packaging model files requires an explicit -ModelDistributionAuthorized confirmation.'
 }
 
 foreach ($path in @($DllPath, $SignaturePath)) {
@@ -33,16 +54,53 @@ if ([IO.Path]::GetExtension($SignaturePath) -ne '.xsgn') {
     throw 'SignaturePath must identify an .xsgn file.'
 }
 
+$dllInfo = Get-Item -LiteralPath $DllPath
+$signatureInfo = Get-Item -LiteralPath $SignaturePath
+if ($dllInfo.LastWriteTimeUtc -gt $signatureInfo.LastWriteTimeUtc) {
+    throw 'The module DLL is newer than its signature. Sign the current DLL before packaging.'
+}
+
 $signatureText = Get-Content -LiteralPath $SignaturePath -Raw
-if ($signatureText -notmatch '<Signature\s+version="[^"]+"\s+developerId="[^"]+">') {
+$signatureMatch = [regex]::Match($signatureText, '<Signature\s+version="[^"]+"\s+developerId="([^"]+)">')
+if (-not $signatureMatch.Success) {
     throw 'The supplied file does not contain a recognizable PixInsight code signature.'
+}
+$developerId = $signatureMatch.Groups[1].Value
+$certifiedDevelopersPath = Join-Path $env:ProgramFiles 'PixInsight\etc\security\certified-developers.xcdev'
+if (-not (Test-Path -LiteralPath $certifiedDevelopersPath -PathType Leaf)) {
+    throw "PixInsight certified developer database was not found: $certifiedDevelopersPath"
+}
+$certifiedDevelopers = Get-Content -LiteralPath $certifiedDevelopersPath -Raw
+$certifiedIds = @([regex]::Matches($certifiedDevelopers, '<Developer\b[^>]*\bid="([^"]+)"') |
+    ForEach-Object { $_.Groups[1].Value })
+if ($certifiedIds -cnotcontains $developerId) {
+    throw "The signature developerId '$developerId' is not present in PixInsight's certified developer database. A Local Signing Identity cannot be used for a public module release."
+}
+
+$requiredBackendFiles = @(
+    'catalog.json',
+    'engine\run_models.py',
+    'engine\models\InDeConv.onnx',
+    'engine\models\InDeNoise.onnx',
+    'engine\models\InDeStars.onnx',
+    'tools\xt_alt_worker.py',
+    'runtime\python.exe',
+    'runtime\python313.dll',
+    'runtime\python313._pth'
+)
+foreach ($relativePath in $requiredBackendFiles) {
+    $source = Join-Path $BackendRoot $relativePath
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+        throw "Required backend file was not found: $source"
+    }
 }
 
 $releaseRoot = Join-Path $moduleRoot 'release'
-$packageName = "XTAlt-$Version-windows-x64"
-$stage = Join-Path $releaseRoot $packageName
-$archive = Join-Path $releaseRoot ($packageName + '.zip')
+$packageBaseName = "XTAlt-$Version-windows-x64"
+$stage = Join-Path $releaseRoot $packageBaseName
+$archive = Join-Path $releaseRoot ($packageBaseName + '.zip')
 $checksums = Join-Path $releaseRoot 'SHA256SUMS.txt'
+$repositoryFile = Join-Path $moduleRoot 'updates.xri'
 
 $releaseRootFull = [IO.Path]::GetFullPath($releaseRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $stageFull = [IO.Path]::GetFullPath($stage)
@@ -50,23 +108,169 @@ if (-not $stageFull.StartsWith($releaseRootFull + [IO.Path]::DirectorySeparatorC
     throw 'The release staging directory resolved outside the repository release directory.'
 }
 
+if (Test-Path -LiteralPath $repositoryFile -PathType Leaf) {
+    $existingRepository = Get-Content -LiteralPath $repositoryFile -Raw
+    if ($existingRepository -match '<Signature\b' -and -not $OverwriteSignedRepository) {
+        throw 'updates.xri is signed. Use -OverwriteSignedRepository to replace it with a newly generated unsigned document.'
+    }
+}
+
 if (Test-Path -LiteralPath $stageFull) {
     Remove-Item -LiteralPath $stageFull -Recurse -Force
 }
 New-Item -ItemType Directory -Path $stageFull -Force | Out-Null
 
-Copy-Item -LiteralPath $DllPath -Destination (Join-Path $stageFull 'XTAlt-pxm.dll')
-Copy-Item -LiteralPath $SignaturePath -Destination (Join-Path $stageFull 'XTAlt-pxm.xsgn')
-Copy-Item -LiteralPath (Join-Path $moduleRoot 'docs\INSTALL.zh-CN.md') -Destination (Join-Path $stageFull 'INSTALL.zh-CN.md')
-Copy-Item -LiteralPath (Join-Path $moduleRoot 'NOTICE.md') -Destination (Join-Path $stageFull 'NOTICE.md')
+$binDirectory = Join-Path $stageFull 'bin'
+$backendDirectory = Join-Path $binDirectory 'XTAltBackend'
+$engineDirectory = Join-Path $backendDirectory 'engine'
+$modelsDirectory = Join-Path $engineDirectory 'models'
+$toolsDirectory = Join-Path $backendDirectory 'tools'
+$runtimeDirectory = Join-Path $backendDirectory 'runtime'
+$sitePackagesDirectory = Join-Path $runtimeDirectory 'Lib\site-packages'
+$documentationDirectory = Join-Path $stageFull 'doc\docs\XTAlt'
+
+foreach ($directory in @(
+    $binDirectory,
+    $modelsDirectory,
+    $toolsDirectory,
+    $sitePackagesDirectory,
+    $documentationDirectory
+)) {
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+}
+
+Copy-Item -LiteralPath $DllPath -Destination (Join-Path $binDirectory 'XTAlt-pxm.dll') -Force
+Copy-Item -LiteralPath $SignaturePath -Destination (Join-Path $binDirectory 'XTAlt-pxm.xsgn') -Force
+Copy-Item -LiteralPath (Join-Path $BackendRoot 'catalog.json') -Destination $backendDirectory -Force
+Copy-Item -LiteralPath (Join-Path $BackendRoot 'engine\run_models.py') -Destination $engineDirectory -Force
+Copy-Item -LiteralPath (Join-Path $BackendRoot 'tools\xt_alt_worker.py') -Destination $toolsDirectory -Force
+
+foreach ($modelName in @('InDeConv.onnx', 'InDeNoise.onnx', 'InDeStars.onnx')) {
+    Copy-Item -LiteralPath (Join-Path $BackendRoot "engine\models\$modelName") -Destination $modelsDirectory -Force
+}
+
+$runtimeSource = Join-Path $BackendRoot 'runtime'
+Get-ChildItem -LiteralPath $runtimeSource -File | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $runtimeDirectory -Force
+}
+
+$sitePackagesSource = Join-Path $runtimeSource 'Lib\site-packages'
+$sitePackageNames = @(
+    'numpy',
+    'numpy.libs',
+    'onnxruntime',
+    'coloredlogs',
+    'humanfriendly',
+    'flatbuffers',
+    'packaging',
+    'google',
+    'sympy',
+    'mpmath',
+    'cv2',
+    'coloredlogs.pth'
+)
+$sitePackagePatterns = @(
+    'numpy-*.dist-info',
+    'onnxruntime_directml-*.dist-info',
+    'coloredlogs-*.dist-info',
+    'humanfriendly-*.dist-info',
+    'flatbuffers-*.dist-info',
+    'packaging-*.dist-info',
+    'protobuf-*.dist-info',
+    'sympy-*.dist-info',
+    'mpmath-*.dist-info',
+    'opencv_python_headless-*.dist-info'
+)
+
+foreach ($name in $sitePackageNames) {
+    $source = Join-Path $sitePackagesSource $name
+    if (-not (Test-Path -LiteralPath $source)) {
+        throw "Required Python runtime component was not found: $source"
+    }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $sitePackagesDirectory $name) -Recurse -Force
+}
+foreach ($pattern in $sitePackagePatterns) {
+    $matches = @(Get-ChildItem -LiteralPath $sitePackagesSource -Filter $pattern)
+    if ($matches.Count -eq 0) {
+        throw "Required Python runtime component did not match: $pattern"
+    }
+    foreach ($match in $matches) {
+        Copy-Item -LiteralPath $match.FullName -Destination (Join-Path $sitePackagesDirectory $match.Name) -Recurse -Force
+    }
+}
+
+Copy-Item -LiteralPath (Join-Path $moduleRoot 'docs\INSTALL.zh-CN.md') -Destination $documentationDirectory -Force
+Copy-Item -LiteralPath (Join-Path $moduleRoot 'NOTICE.md') -Destination $documentationDirectory -Force
+foreach ($relativePath in @('LICENSES.md', 'runtime-requirements.txt')) {
+    $source = Join-Path $BackendRoot $relativePath
+    if (Test-Path -LiteralPath $source -PathType Leaf) {
+        Copy-Item -LiteralPath $source -Destination $documentationDirectory -Force
+    }
+}
+
+$stagePython = Join-Path $runtimeDirectory 'python.exe'
+$probe = @'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root / "engine"))
+import run_models
+
+result = {}
+for product, file_name in run_models.FILES.items():
+    session = run_models.make_session(root / "engine" / "models" / file_name, "cpu")
+    result[product] = {
+        "file": file_name,
+        "providers": session.get_providers(),
+        "inputs": [item.name for item in session.get_inputs()],
+        "outputs": [item.name for item in session.get_outputs()],
+    }
+print(json.dumps(result, ensure_ascii=False))
+'@
+& $stagePython -I -B -X utf8 -c $probe $backendDirectory
+if ($LASTEXITCODE -ne 0) {
+    throw 'The staged XTAlt backend failed its ONNX session validation.'
+}
 
 if (Test-Path -LiteralPath $archive) {
     Remove-Item -LiteralPath $archive -Force
 }
 Compress-Archive -Path (Join-Path $stageFull '*') -DestinationPath $archive -CompressionLevel Optimal
 
-$hash = Get-FileHash -LiteralPath $archive -Algorithm SHA256
-Set-Content -LiteralPath $checksums -Encoding ASCII -Value ("{0}  {1}" -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $archive))
+$sha1 = (Get-FileHash -LiteralPath $archive -Algorithm SHA1).Hash.ToLowerInvariant()
+$sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath $checksums -Encoding ASCII -Value ("{0}  {1}" -f $sha256, (Split-Path -Leaf $archive))
 
+$releaseDate = [DateTime]::UtcNow.ToString('yyyyMMdd')
+$serverUrl = "https://github.com/$RepositoryOwner/$RepositoryName/releases/download/$ReleaseTag/"
+$archiveName = Split-Path -Leaf $archive
+$metadataId = "$releaseDate-xtalt-$Version"
+$xri = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<xri version="1.0">
+   <description>
+      <p>3XT-ALT native PixInsight processes with a self-contained Windows inference backend.</p>
+   </description>
+   <metadata id="$metadataId" releaseDate="$releaseDate">
+      <title>3XT-ALT $Version for Windows x64</title>
+      <description>
+         <p>Installs BXT-ALT, SXT-ALT and NXT-ALT with Real-Time Preview support and the complete local ONNX backend.</p>
+      </description>
+   </metadata>
+   <platform os="windows" arch="x64" version="1.9.0:1.9.99">
+      <package fileName="$archiveName" sha1="$sha1" type="module" metadata="$metadataId" serverURL="$serverUrl"/>
+   </platform>
+</xri>
+"@
+$utf8WithoutBom = New-Object Text.UTF8Encoding($false)
+[IO.File]::WriteAllText($repositoryFile, $xri, $utf8WithoutBom)
+
+$archiveInfo = Get-Item -LiteralPath $archive
 Write-Host "Release archive: $archive"
-Write-Host "Checksums: $checksums"
+Write-Host ("Archive size: {0:N2} MiB" -f ($archiveInfo.Length / 1MB))
+Write-Host "SHA-1: $sha1"
+Write-Host "SHA-256: $sha256"
+Write-Host "Unsigned repository document: $repositoryFile"
+Write-Host 'Sign updates.xri after the package and release URL are final.'

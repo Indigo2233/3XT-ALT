@@ -12,26 +12,34 @@ Real-Time Preview。图像数据通过内存管道与本地 Python/ONNX 后端�
 
 ## 当前发布状态
 
-本仓库公开 PCL 源码、构建脚本和测试脚本。公开二进制发行版需要有效的
-Certified PixInsight Developer（CPD）代码签名。开发者本机生成的 Local Signing
-Identity 仅适合本地开发和测试。
+本仓库公开 PCL 源码、构建脚本、测试脚本和 PixInsight 更新源描述文件。公开二进制
+发行版需要有效的 Certified PixInsight Developer（CPD）代码签名。开发者本机生成的
+Local Signing Identity 仅适合本地开发和测试。
 
-仓库和 Release 均不包含 ONNX 模型、解密计算图、应用运行时、`.xssk` 私钥或
-本地 `.xsgn` 签名。详细范围参见 [NOTICE.md](NOTICE.md)。
+Git 历史不保存 ONNX 模型、应用运行时、`.xssk` 私钥、`.xsgn` 签名或生成的二进制。
+获得相应分发授权后，完整后端由发布脚本打包为 GitHub Release 资产。详细范围参见
+[NOTICE.md](NOTICE.md)。
 
 ## 用户安装
 
-取得 CPD 签名并发布 GitHub Release 后，用户安装流程如下：
+取得 CPD 签名并发布 GitHub Release 后，用户可直接通过 PixInsight 更新系统安装：
 
-1. 从 [Releases](https://github.com/Indigo2233/3XT-ALT/releases) 下载
-   `XTAlt-<version>-windows-x64.zip`。
-2. 将压缩包解压到长期保留的目录。
-3. 在 PixInsight 中打开 `Process > Modules > Install Modules`。
-4. 选择解压目录，确认 `XTAlt-pxm.dll`，然后执行安装。
-5. 在 `Process > XTAlt` 中打开三个 Process。
+1. 打开 `Resources > Updates > Manage Repositories`。
+2. 添加以下仓库 URL，保留末尾的 `/`：
 
-后端安装在自定义目录时，请在启动 PixInsight 前设置环境变量
-`LFT_INSTALL_DIR`。默认后端目录为：
+   ```text
+   https://raw.githubusercontent.com/Indigo2233/3XT-ALT/main/
+   ```
+
+3. 执行 `Resources > Updates > Check for Updates`，选择 `3XT-ALT` 更新。
+4. 下载完成后退出 PixInsight，由更新程序安装并自动重新启动。
+5. 在 `Process > XTAlt` 中打开 `BXTAlt`、`SXTAlt` 或 `NXTAlt`。
+
+更新包会将模块安装到 PixInsight 的 `bin` 目录，并将自包含后端安装到
+`bin/XTAltBackend`。无需额外安装 Python 或手工复制模型。
+
+开发或兼容旧版安装时，也可以在启动 PixInsight 前设置环境变量
+`LFT_INSTALL_DIR`。旧版默认后端目录为：
 
 ```text
 %LOCALAPPDATA%\Programs\老佛爷的三件套
@@ -73,27 +81,43 @@ Windows x64 构建要求：
 
 ## 生成公共发行包
 
-取得 CPD 签名后执行：
+使用 CPD 身份签名 DLL，并确认模型具备公开分发授权后执行：
 
 ```powershell
-.\package-release.ps1 -Version 1.0.0 -SignaturePath "C:\path\XTAlt-pxm.xsgn" -CpdSigned
+.\package-release.ps1 `
+  -Version 1.0.1 `
+  -SignaturePath "C:\path\XTAlt-pxm.xsgn" `
+  -CpdSigned `
+  -ModelDistributionAuthorized
 ```
 
-发行包和 SHA-256 校验文件将生成到 `release` 目录。
+脚本会生成完整 Windows x64 更新包、SHA-256 校验文件和未签名的 `updates.xri`，
+并在打包前使用精简运行时加载三个 ONNX 模型进行验证。随后使用 PixInsight
+`CodeSign` 对 `updates.xri` 进行 XML 签名，提交并推送该文件，再发布 Release：
+
+```powershell
+.\publish-release.ps1 -Version 1.0.1 -ConfirmPublicRelease
+```
+
+发行资产的下载地址写入 `updates.xri` 的 `serverURL`，模型文件不会进入 Git 历史。
 
 ## 后端依赖
 
 模块会按以下顺序定位兼容后端：
 
 1. `LFT_INSTALL_DIR`
-2. 模块文件的上级目录
-3. `%LOCALAPPDATA%\Programs\老佛爷的三件套`
+2. 模块同目录下的 `XTAltBackend`
+3. 模块文件的上级目录
+4. `%LOCALAPPDATA%\Programs\老佛爷的三件套`
 
 后端目录需要包含：
 
 ```text
 runtime/python.exe
 engine/run_models.py
+engine/models/InDeConv.onnx
+engine/models/InDeNoise.onnx
+engine/models/InDeStars.onnx
 tools/xt_alt_worker.py
 ```
 

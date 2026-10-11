@@ -1,23 +1,20 @@
 # 3XT-ALT 安装说明
 
-## 面向普通用户的发行包
+## 通过 Manage Repositories 安装
 
-此流程适用于带有有效 CPD 签名的 GitHub Release。
+此流程适用于带有有效 CPD 签名的正式发行版。
 
-1. 下载 `XTAlt-<version>-windows-x64.zip` 和对应的
-   `SHA256SUMS.txt`。
-2. 校验压缩包的 SHA-256 值。
-3. 将压缩包解压到长期保留的目录，例如：
+1. 在 PixInsight 中打开 `Resources > Updates > Manage Repositories`。
+2. 添加以下 URL，保留末尾的 `/`：
 
    ```text
-   C:\Users\<用户名>\AppData\Local\Programs\3XT-ALT\module
+   https://raw.githubusercontent.com/Indigo2233/3XT-ALT/main/
    ```
 
-4. 关闭正在运行的 Real-Time Preview。
-5. 在 PixInsight 中打开 `Process > Modules > Install Modules`。
-6. 将 `Search Directory` 设置为解压目录，单击 `Search`。
-7. 确认列表包含 `XTAlt-pxm.dll`，然后单击 `Install`。
-8. 在 Process Explorer 的 `XTAlt` 分类中确认以下项目：
+3. 执行 `Resources > Updates > Check for Updates`。
+4. 选择 `3XT-ALT`，完成下载后退出 PixInsight。
+5. 更新程序会安装模块和完整后端，并自动重新启动 PixInsight。
+6. 在 Process Explorer 的 `XTAlt` 分类中确认以下项目：
 
    - `BXTAlt`
    - `SXTAlt`
@@ -25,13 +22,19 @@
 
 ## 后端目录
 
-模块默认查找：
+Manage Repositories 更新包会将完整后端安装到：
+
+```text
+<PixInsight 安装目录>\bin\XTAltBackend
+```
+
+模块也兼容现有桌面版后端，默认查找：
 
 ```text
 %LOCALAPPDATA%\Programs\老佛爷的三件套
 ```
 
-后端位于其他目录时，请在 Windows 用户环境变量中设置：
+后端位于其他目录时，可以在 Windows 用户环境变量中设置：
 
 ```text
 LFT_INSTALL_DIR=<后端安装目录>
@@ -71,10 +74,13 @@ Script > Execute Script File
 
 ### 无法定位后端
 
-确认 `LFT_INSTALL_DIR` 指向包含以下文件的目录：
+确认 `LFT_INSTALL_DIR` 或 `bin\XTAltBackend` 指向包含以下文件的目录：
 
 ```text
 runtime/python.exe
 engine/run_models.py
+engine/models/InDeConv.onnx
+engine/models/InDeNoise.onnx
+engine/models/InDeStars.onnx
 tools/xt_alt_worker.py
 ```

@@ -63,7 +63,10 @@ bool IsInstallationRoot( const String& root )
 {
    return File::Exists( JoinPath( root, "runtime/python.exe" ) ) &&
           File::Exists( JoinPath( root, "engine/run_models.py" ) ) &&
-          File::Exists( JoinPath( root, "tools/xt_alt_worker.py" ) );
+          File::Exists( JoinPath( root, "tools/xt_alt_worker.py" ) ) &&
+          File::Exists( JoinPath( root, "engine/models/InDeConv.onnx" ) ) &&
+          File::Exists( JoinPath( root, "engine/models/InDeNoise.onnx" ) ) &&
+          File::Exists( JoinPath( root, "engine/models/InDeStars.onnx" ) );
 }
 
 void AppendUInt32LE( ByteArray& data, uint32 value )
@@ -90,6 +93,11 @@ const char* JsonBool( bool value )
 IsoString JsonNumber( double value )
 {
    return IsoString().Format( "%.9g", value );
+}
+
+IsoString JsonUnsignedLiteral( uint64 value )
+{
+   return IsoString().Format( "%llu", static_cast<unsigned long long>( value ) );
 }
 
 uint64 JsonUnsigned( const std::string& json, const char* key )
@@ -154,11 +162,12 @@ IsoString XTAltWorker::BuildRequestJson( const Image& image, const XTAltInstance
    IsoString json;
    json << "{\"command\":\"process\",\"product\":\""
         << XTProductWorkerId( instance.m_product )
-        << "\",\"width\":" << image.Width()
-        << ",\"height\":" << image.Height()
-        << ",\"channels\":" << image.NumberOfNominalChannels()
+        << "\",\"width\":" << JsonUnsignedLiteral( image.Width() )
+        << ",\"height\":" << JsonUnsignedLiteral( image.Height() )
+        << ",\"channels\":" << JsonUnsignedLiteral( image.NumberOfNominalChannels() )
         << ",\"payloadBytes\":"
-        << uint64( image.NumberOfPixels() )*image.NumberOfNominalChannels()*sizeof( float )
+        << JsonUnsignedLiteral( uint64( image.NumberOfPixels() )*
+                                image.NumberOfNominalChannels()*sizeof( float ) )
         << ",\"params\":{";
 
    const char* device = instance.p_device == XTAltDeviceParameter::DirectML ? "dml" :
@@ -183,7 +192,7 @@ IsoString XTAltWorker::BuildRequestJson( const Image& image, const XTAltInstance
    else
    {
       json << ",\"dn\":" << JsonNumber( instance.p_dn )
-           << ",\"iterations\":" << instance.p_iterations
+           << ",\"iterations\":" << JsonUnsignedLiteral( instance.p_iterations )
            << ",\"csep\":" << JsonBool( instance.p_csep )
            << ",\"fsep\":" << JsonBool( instance.p_fsep )
            << ",\"di\":" << JsonNumber( instance.p_di )
@@ -222,7 +231,11 @@ String XTAltWorker::FindInstallationRoot() const
 
    String modulePath = ModuleFilePath();
    if ( !modulePath.IsEmpty() )
-      candidates << ParentDirectory( modulePath );
+   {
+      String moduleDirectory = ParentDirectory( modulePath );
+      candidates << JoinPath( moduleDirectory, "XTAltBackend" );
+      candidates << moduleDirectory;
+   }
 
    String localAppData = EnvironmentValue( L"LOCALAPPDATA" );
    if ( !localAppData.IsEmpty() )
@@ -292,11 +305,16 @@ void XTAltWorker::DrainOutput( ByteArray& output, ByteArray& errors )
 void XTAltWorker::Process( Image& image, const XTAltInstance& instance, Image* starsOutput )
 {
    std::lock_guard<std::mutex> requestLock( m_requestMutex );
+   uint64 requestId = m_generation.load();
+   {
+      std::lock_guard<std::mutex> lock( m_processMutex );
+      m_requestActive = true;
+   }
    try
    {
-      uint64 requestId = m_generation.load();
       CheckCancellation( requestId );
       EnsureStarted();
+      CheckCancellation( requestId );
 
    IsoString json = BuildRequestJson( image, instance );
    ByteArray header;
@@ -428,10 +446,26 @@ void XTAltWorker::Process( Image& image, const XTAltInstance& instance, Image* s
          else
             starsOutput->FreeData();
       }
+
+      {
+         std::lock_guard<std::mutex> lock( m_processMutex );
+         m_requestActive = false;
+      }
+   }
+   catch ( const ProcessAborted& )
+   {
+      std::lock_guard<std::mutex> lock( m_processMutex );
+      m_requestActive = false;
+      throw;
    }
    catch ( ... )
    {
-      Abort();
+      {
+         std::lock_guard<std::mutex> lock( m_processMutex );
+         m_requestActive = false;
+      }
+      ++m_generation;
+      StopProcess( true );
       throw;
    }
 }
@@ -440,7 +474,7 @@ void XTAltWorker::Abort()
 {
    ++m_generation;
    std::lock_guard<std::mutex> lock( m_processMutex );
-   if ( m_process && m_process->IsRunning() )
+   if ( m_requestActive && m_process && m_process->IsRunning() )
       m_process->Kill();
 }
 
@@ -455,6 +489,7 @@ void XTAltWorker::StopProcess( bool force )
          m_process->Terminate();
    }
    m_process.reset();
+   m_requestActive = false;
 }
 
 void XTAltWorker::Shutdown()

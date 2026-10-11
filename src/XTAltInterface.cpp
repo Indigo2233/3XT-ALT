@@ -129,7 +129,6 @@ bool XTAltInterface::RequiresRealTimePreviewUpdate( const Image&, const View&, c
 
 bool XTAltInterface::GenerateRealTimePreview( Image& image, const View&, const Rect&, int, String& info ) const
 {
-   m_cancelled = false;
    try
    {
       if ( m_cancelled )

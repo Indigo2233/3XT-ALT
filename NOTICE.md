@@ -3,7 +3,7 @@
 This repository contains the XTAlt PixInsight integration source code, build
 automation, documentation, and tests.
 
-The following items are intentionally excluded:
+The following items are intentionally excluded from Git history:
 
 - ONNX model files and decrypted computational graphs
 - application runtimes and extracted third-party program files
@@ -11,9 +11,10 @@ The following items are intentionally excluded:
 - signatures created with a Local Signing Identity
 - generated binaries and build caches
 
-Users must obtain all required models, runtimes, and third-party software through
-channels that grant them the necessary rights. Product names and trademarks belong
-to their respective owners.
+Self-contained GitHub Release assets may include the inference runtime and model files
+only when the publisher has confirmed the necessary redistribution rights. The release
+packager requires this confirmation explicitly. Product names and trademarks belong to
+their respective owners.
 
 A public binary release of this module requires a valid Certified PixInsight
 Developer code signature. Local developer signatures are intended for development

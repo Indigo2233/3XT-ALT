@@ -40,6 +40,7 @@ private:
    std::mutex m_processMutex;
    std::unique_ptr<ExternalProcess> m_process;
    std::atomic<uint64> m_generation { 0 };
+   bool m_requestActive = false; // guarded by m_processMutex
 };
 
 } // pcl
