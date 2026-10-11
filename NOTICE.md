@@ -5,8 +5,8 @@ automation, documentation, and tests.
 
 The following items are intentionally excluded from Git history:
 
-- ONNX model files and decrypted computational graphs
-- application runtimes and extracted third-party program files
+- ONNX model files and generated model-analysis artifacts
+- application runtimes and generated build files
 - PixInsight `.xssk` private signing keys
 - signatures created with a Local Signing Identity
 - generated binaries and build caches
