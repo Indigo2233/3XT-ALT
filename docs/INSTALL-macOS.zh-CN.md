@@ -89,6 +89,7 @@ bash setup-macos.sh --check-only \
 CI 在两种架构的 Mac 上编译模块并运行三个模型的 CPU 推理、重复调用、管道输出及安装包检查。
 CI 没有 PixInsight 许可证，实际 PixInsight 本地签名、模块注册和 Real-Time Preview
 尚需用户在装有许可证的 Mac 上验证。Core ML 硬件加速尚未作为默认路径验收。
+已完成的具体测试及构建记录见 [macOS 适配验证记录](MACOS-VALIDATION.md)。
 
 安装后在 PixInsight 中执行 `Script > Execute Script File`，选择安装目录中的
 `test/native-selftest.js`，确认控制台测试成功。随后在非关键图像上检查 Real-Time Preview：
@@ -108,6 +109,9 @@ python3 tools/package-macos.py --model-distribution-authorized
 
 可运行仓库 Actions 中的 `macOS packages` 工作流生成两套安装包。模型来自现有、固定
 SHA-256 的授权 Release。CI 只生成可下载构建产物，发布者检查成功后再上传 Release。
+发布时运行 `Publish verified macOS packages` 工作流，填写成功的构建 run ID 并确认公开发布。
+发布工作流校验构建来自 main 且已成功、校验两个归档，自动生成小型安装入口，再上传六个 Mac 资产。
+Windows 资产使用独立名称并予以保留。
 
 This product is based on software from the PixInsight project, developed by
 Pleiades Astrophoto and its contributors (https://pixinsight.com/).

@@ -171,3 +171,7 @@ Mac 包含 `XTAlt-pxm.dylib`、`XTAltBackend/runtime/bin/python3`、三个模型
   通过 GitHub `macOS packages` 工作流进行双架构构建和验证，再发布产物。
 - `tools/package-macos-launcher.py` 生成跨架构小型安装入口；Mac 校验文件使用独立名称，
   不覆盖既有 Windows ZIP 或 `SHA256SUMS-local.txt`。
+- 可运行 `Publish verified macOS packages` 工作流，传入已成功的 main 分支构建 run ID。
+  仅在用户已授权发布时设置 `confirm_public_release=true`。工作流会验证来源和归档再上传六个 Mac 资产。
+- 已通过的双架构测试详见 [docs/MACOS-VALIDATION.md](docs/MACOS-VALIDATION.md)；
+  不得将独立动态库加载和安装器 fixture 测试写成已经在 PixInsight 中验证。

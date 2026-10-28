@@ -24,6 +24,7 @@ Identity 在本机签名模块，即可安装完整的三个 Process 和 Real-Ti
 Mac 要求 macOS 14+，使用 PCL 2.10.8 构建，建议搭配 PixInsight 1.9.5。
 Mac 的 CPU 模型推理和安装包由 CI 检查；PixInsight 内的签名、加载及实时预览仍需实机验证。
 详见 [macOS 安装与验证](docs/INSTALL-macOS.zh-CN.md)。
+已完成的自动测试见 [macOS 验证记录](docs/MACOS-VALIDATION.md)。
 
 桌面版附带的 Siril 脚本使用模型名称命名：`InDeConv.py`、`InDeStars.py` 和
 `InDeNoise.py`，分别对应反卷积、去星和降噪功能。
