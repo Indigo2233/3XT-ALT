@@ -294,9 +294,15 @@ XTAltInterface::GUIData::GUIData( XTAltInterface& w )
    Device_Label.SetText( "Compute device:" );
    Device_Label.SetTextAlignment( TextAlign::Right | TextAlign::VertCenter );
    Device_Label.SetFixedWidth( labelWidth );
+#ifdef __PCL_MACOSX
+   Device_ComboBox.AddItem( "Auto (CPU)" );
+   Device_ComboBox.AddItem( "DirectML (Windows only)" );
+#else
    Device_ComboBox.AddItem( "Auto (DirectML / CPU)" );
    Device_ComboBox.AddItem( "DirectML GPU" );
+#endif
    Device_ComboBox.AddItem( "CPU" );
+   Device_ComboBox.AddItem( "Core ML (macOS, experimental)" );
    Device_ComboBox.OnItemSelected(
       (ComboBox::item_event_handler)&XTAltInterface::__Device_ItemSelected, w );
    Device_Sizer.SetSpacing( 4 );

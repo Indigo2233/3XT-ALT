@@ -7,7 +7,12 @@
 #include <pcl/ImageVariant.h>
 #include <pcl/ProcessInterface.h>
 
+#ifdef __PCL_WINDOWS
 #include <Windows.h>
+#else
+#include <dlfcn.h>
+#include <cstdlib>
+#endif
 
 #include <cstring>
 #include <string>
@@ -19,20 +24,28 @@ namespace pcl
 namespace
 {
 
-String EnvironmentValue( const wchar_t* name )
+String EnvironmentValue( const char* name )
 {
-   DWORD length = ::GetEnvironmentVariableW( name, nullptr, 0 );
+#ifdef __PCL_WINDOWS
+   String wideName = String::UTF8ToUTF16( name );
+   const wchar_t* widePointer = reinterpret_cast<const wchar_t*>( wideName.c_str() );
+   DWORD length = ::GetEnvironmentVariableW( widePointer, nullptr, 0 );
    if ( length == 0 )
       return String();
    std::vector<wchar_t> buffer( length );
-   if ( ::GetEnvironmentVariableW( name, buffer.data(), length ) == 0 )
+   if ( ::GetEnvironmentVariableW( widePointer, buffer.data(), length ) == 0 )
       return String();
    return String( buffer.data() );
+#else
+   const char* value = std::getenv( name );
+   return value != nullptr ? String::UTF8ToUTF16( value ) : String();
+#endif
 }
 
 String ModuleFilePath()
 {
    static int moduleMarker;
+#ifdef __PCL_WINDOWS
    HMODULE module = nullptr;
    if ( !::GetModuleHandleExW( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
                                GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
@@ -44,6 +57,21 @@ String ModuleFilePath()
    if ( length == 0 || length >= buffer.size() )
       return String();
    return File::WindowsPathToUnix( String( buffer.data(), 0, length ) );
+#else
+   Dl_info info;
+   if ( ::dladdr( &moduleMarker, &info ) == 0 || info.dli_fname == nullptr )
+      return String();
+   return String::UTF8ToUTF16( info.dli_fname );
+#endif
+}
+
+String PythonRelativePath()
+{
+#ifdef __PCL_WINDOWS
+   return "runtime/python.exe";
+#else
+   return "runtime/bin/python3";
+#endif
 }
 
 String ParentDirectory( const String& path )
@@ -61,7 +89,7 @@ String JoinPath( String left, const String& right )
 
 bool IsInstallationRoot( const String& root )
 {
-   return File::Exists( JoinPath( root, "runtime/python.exe" ) ) &&
+   return File::Exists( JoinPath( root, PythonRelativePath() ) ) &&
           File::Exists( JoinPath( root, "engine/run_models.py" ) ) &&
           File::Exists( JoinPath( root, "tools/xt_alt_worker.py" ) ) &&
           File::Exists( JoinPath( root, "engine/models/InDeConv.onnx" ) ) &&
@@ -171,6 +199,7 @@ IsoString XTAltWorker::BuildRequestJson( const Image& image, const XTAltInstance
         << ",\"params\":{";
 
    const char* device = instance.p_device == XTAltDeviceParameter::DirectML ? "dml" :
+                        instance.p_device == XTAltDeviceParameter::CoreML ? "coreml" :
                         instance.p_device == XTAltDeviceParameter::CPU ? "cpu" : "auto";
    json << "\"device\":\"" << device << "\",\"overlap\":" << JsonNumber( instance.p_overlap );
 
@@ -225,7 +254,7 @@ XTAltWorker::~XTAltWorker()
 String XTAltWorker::FindInstallationRoot() const
 {
    Array<String> candidates;
-   String configured = EnvironmentValue( L"LFT_INSTALL_DIR" );
+   String configured = EnvironmentValue( "LFT_INSTALL_DIR" );
    if ( !configured.IsEmpty() )
       candidates << File::WindowsPathToUnix( configured );
 
@@ -237,9 +266,15 @@ String XTAltWorker::FindInstallationRoot() const
       candidates << moduleDirectory;
    }
 
-   String localAppData = EnvironmentValue( L"LOCALAPPDATA" );
+#ifdef __PCL_WINDOWS
+   String localAppData = EnvironmentValue( "LOCALAPPDATA" );
    if ( !localAppData.IsEmpty() )
       candidates << JoinPath( File::WindowsPathToUnix( localAppData ), L"Programs/老佛爷的三件套" );
+#else
+   String userHome = EnvironmentValue( "HOME" );
+   if ( !userHome.IsEmpty() )
+      candidates << JoinPath( userHome, "Library/Application Support/XTAlt/XTAltBackend" );
+#endif
 
    for ( const String& candidate : candidates )
    {
@@ -266,7 +301,7 @@ void XTAltWorker::EnsureStarted()
 
    m_process.reset();
    String root = FindInstallationRoot();
-   String python = JoinPath( root, "runtime/python.exe" );
+   String python = JoinPath( root, PythonRelativePath() );
    String worker = JoinPath( root, "tools/xt_alt_worker.py" );
    String engine = JoinPath( root, "engine" );
 

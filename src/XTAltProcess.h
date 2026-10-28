@@ -69,7 +69,8 @@ private:
 class XTAltDeviceParameter : public MetaEnumeration
 {
 public:
-   enum { Auto, DirectML, CPU, NumberOfItems, Default = Auto };
+   // Append new entries to preserve saved Process Icons (0=Auto, 1=DML, 2=CPU).
+   enum { Auto, DirectML, CPU, CoreML, NumberOfItems, Default = Auto };
 
    explicit XTAltDeviceParameter( MetaProcess* );
    IsoString Id() const override;

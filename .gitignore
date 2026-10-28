@@ -6,6 +6,9 @@
 *.dll
 *.exe
 *.lib
+*.dylib
+*.so
+*.a
 *.obj
 *.pdb
 *.exp

@@ -9,13 +9,19 @@
 #include "XTAltProcess.h"
 #include "XTAltWorker.h"
 
+#ifdef __PCL_WINDOWS
 #include <Windows.h>
+#else
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 namespace
 {
 
 void XTAltDiagnostic( const char* message )
 {
+#ifdef __PCL_WINDOWS
    wchar_t path[32768];
    DWORD length = ::GetEnvironmentVariableW( L"XTALT_DIAGNOSTIC_LOG", path, DWORD( sizeof( path )/sizeof( path[0] ) ) );
    if ( length == 0 || length >= sizeof( path )/sizeof( path[0] ) )
@@ -29,6 +35,15 @@ void XTAltDiagnostic( const char* message )
       ::WriteFile( file, "\r\n", 2, &written, nullptr );
       ::CloseHandle( file );
    }
+#else
+   const char* path = std::getenv( "XTALT_DIAGNOSTIC_LOG" );
+   if ( path != nullptr && *path != '\0' )
+      if ( FILE* file = std::fopen( path, "a" ) )
+      {
+         std::fprintf( file, "%s\n", message );
+         std::fclose( file );
+      }
+#endif
 }
 
 } // namespace
@@ -77,7 +92,11 @@ String XTAltModule::TradeMarks() const
 
 String XTAltModule::OriginalFileName() const
 {
+#ifdef __PCL_MACOSX
+   return "XTAlt-pxm.dylib";
+#else
    return "XTAlt-pxm.dll";
+#endif
 }
 
 void XTAltModule::GetReleaseDate( int& year, int& month, int& day ) const

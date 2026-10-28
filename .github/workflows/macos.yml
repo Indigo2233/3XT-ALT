@@ -1,0 +1,42 @@
+name: macOS packages
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'backend/**'
+      - '*macos*'
+      - 'CMakeLists.txt'
+      - '.github/workflows/macos.yml'
+      - 'tools/*macos*'
+      - 'test/*macos*'
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      XTALT_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            build/pcl-macos
+            build/macos-${{ matrix.arch }}/lib
+          key: pcl-201860a-macos15-${{ matrix.arch }}-v1
+      - name: Build native module
+        run: bash build-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: module-macos-${{ matrix.arch }}
+          path: build/macos-${{ matrix.arch }}/bin/XTAlt-pxm.dylib

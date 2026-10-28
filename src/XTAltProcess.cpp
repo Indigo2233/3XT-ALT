@@ -102,6 +102,7 @@ IsoString XTAltDeviceParameter::ElementId( size_type index ) const
    {
    case Auto:     return "Auto";
    case DirectML: return "DirectML";
+   case CoreML:   return "CoreML";
    default:       return "CPU";
    }
 }
