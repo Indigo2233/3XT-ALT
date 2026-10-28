@@ -147,7 +147,7 @@ Copy-Item -LiteralPath $DllPath -Destination (Join-Path $binDirectory 'XTAlt-pxm
 Copy-Item -LiteralPath $SignaturePath -Destination (Join-Path $binDirectory 'XTAlt-pxm.xsgn') -Force
 Copy-Item -LiteralPath (Join-Path $BackendRoot 'catalog.json') -Destination $backendDirectory -Force
 Copy-Item -LiteralPath (Join-Path $BackendRoot 'engine\run_models.py') -Destination $engineDirectory -Force
-Copy-Item -LiteralPath (Join-Path $BackendRoot 'tools\xt_alt_worker.py') -Destination $toolsDirectory -Force
+Copy-Item -Path (Join-Path $moduleRoot 'backend\tools\*.py') -Destination $toolsDirectory -Force
 if (-not (Test-Path -LiteralPath $modelSanitizer -PathType Leaf)) {
     throw "Release model sanitizer was not found: $modelSanitizer"
 }

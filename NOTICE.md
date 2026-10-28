@@ -20,3 +20,11 @@ A module distributed for installation on arbitrary PixInsight licenses requires 
 valid Certified PixInsight Developer code signature. The Local Signing Edition ships
 an unsigned module binary; each user generates a signature with their own PixInsight
 Local Signing Identity before installation.
+
+macOS modules carry an Apple ad-hoc code signature for Mach-O integrity. The
+PixInsight Local Signing Identity is a separate requirement. Apple Developer ID
+notarization is not provided. Bundled Python and Python packages retain their
+upstream license files; the complete PCL legal notices are included in Mac packages.
+
+This product is based on software from the PixInsight project, developed by
+Pleiades Astrophoto and its contributors (https://pixinsight.com/).

@@ -36,7 +36,36 @@ jobs:
           key: pcl-201860a-macos15-${{ matrix.arch }}-v1
       - name: Build native module
         run: bash build-macos.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test provider selection
+        run: python3 -m unittest discover -s test -p test_macos_runtime.py
+      - name: Package runtime and test all three models
+        run: python3 tools/package-macos.py --model-distribution-authorized
+      - name: Check relocated package and installer
+        run: |
+          set -euo pipefail
+          bash -n setup-macos.sh Install-macOS.command build-macos.sh
+          target="$RUNNER_TEMP/XTAlt 安装测试"
+          mkdir -p "$target"
+          tar -xzf "release/XTAlt-1.0.1-local-macos-$XTALT_ARCH.tar.gz" -C "$target"
+          package="$target/XTAlt-1.0.1-local-macos-$XTALT_ARCH"
+          python="$package/XTAltBackend/runtime/bin/python3"
+          "$python" -I -B -c 'import numpy, cv2, onnxruntime; print(onnxruntime.get_available_providers())'
+          # A Mach-O fixture exercises preflight without launching or signing PixInsight.
+          fixture="$RUNNER_TEMP/Fixture.app/Contents/MacOS"
+          mkdir -p "$fixture"
+          cp -L "$python" "$fixture/PixInsight"
+          bash "$package/setup-macos.sh" --check-only --pixinsight-app "$RUNNER_TEMP/Fixture.app"
+          printf '\nchanged\n' >> "$package/test/native-selftest.js"
+          if bash "$package/setup-macos.sh" --check-only --pixinsight-app "$RUNNER_TEMP/Fixture.app"; then
+            echo 'Corrupted package unexpectedly passed verification'; exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
-          name: module-macos-${{ matrix.arch }}
-          path: build/macos-${{ matrix.arch }}/bin/XTAlt-pxm.dylib
+          name: package-macos-${{ matrix.arch }}
+          path: |
+            release/*.tar.gz
+            release/SHA256SUMS-macos-*.txt
+          if-no-files-found: error

@@ -18,6 +18,8 @@ jobs:
             -iname '*.xsgn' -o \
             -iname '*.onnx' -o \
             -iname '*.dll' -o \
+            -iname '*.dylib' -o \
+            -iname '*.so' -o \
             -iname '*.exe' \
           \) -print)"
           if [[ -n "$blocked" ]]; then
