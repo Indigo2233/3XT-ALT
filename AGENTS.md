@@ -11,6 +11,8 @@
 
 当前公开版本使用 PixInsight Local Signing Identity。每位用户需要使用自己的
 PixInsight 许可证创建本地身份，并在自己的电脑上签名 DLL。
+当前支持 Windows x64。macOS arm64/x86_64 模块和运行环境尚未发布；
+不得将 ONNX 权重可跨平台使用表述为已支持 Mac 原生 Process。
 
 ## 安全要求
 
@@ -24,7 +26,7 @@ PixInsight 许可证创建本地身份，并在自己的电脑上签名 DLL。
 
 ## 安装前检查
 
-1. 确认系统为 Windows x64，并已安装 PixInsight 1.9.x。
+1. 确认系统为 Windows x64，并已安装 PixInsight 1.9.x；官方 SigningKeys 若要求更新版本，先引导用户升级。
 2. 确认发行包包含：
 
    ```text
@@ -36,19 +38,34 @@ PixInsight 许可证创建本地身份，并在自己的电脑上签名 DLL。
    XTAltBackend/engine/models/InDeStars.onnx
    XTAltBackend/tools/xt_alt_worker.py
    install-local.ps1
+   Install-Windows.cmd
+   setup-windows.ps1
+   installer-common.ps1
+   package-manifest.json
    test/native-selftest.js
    ```
 
 3. 检查 PixInsight Local Signing Identity：
 
-   - 首次使用时运行
-     `C:\Program Files\PixInsight\src\scripts\SigningKeys\SigningKeys.js`。
+   - 首次使用运行 `Script > Development > SigningKeys`。勾选 `Generate Signing Keys`
+     和 `Local signing identity`，在 `Output` 指定 `.xssk` 和密码，点击 `Run`。
+   - 密码由用户在官方界面设置，至少 8 位，含大写、小写及数字或标点，仅 ASCII，无空格。
    - 将生成的 `.xssk` 保存在私有、仅限当前用户访问的位置。
-   - 在 `Edit > Local Signing Identity` 中注册该身份。
+   - 在 `Edit > Local Signing Identity` 中选择文件、由用户输入密码，勾选
+     `Make the local signing identity persistent` 后确认。优先复用已有身份。
    - `.xssk` 的完整路径必须只包含 ASCII 字符，以兼容 PixInsight Windows
      命令行签名接口。
 
 ## 安装流程
+
+推荐用户下载 `XTAlt-1.0.1-setup-windows.zip`、全部解压并双击 `Install-Windows.cmd`。
+向导自动下载校验完整包、选择路径并调用安装器。完整离线包也包含同一个入口。
+逐项界面说明见 `docs/INSTALL.zh-CN.md`。本地身份创建、注册、密码输入和模块扫描
+仍需要用户操作；不得声称完全无人值守。
+
+代理可先执行 `setup-windows.ps1 -CheckOnly -PackageDirectory <完整包目录>` 进行只读校验。
+向导只持久保存 PixInsight 与密钥的路径，位置为 `%LOCALAPPDATA%\XTAltInstaller\preferences.json`。
+使用命令行安装时：
 
 1. 完全退出 PixInsight。
 2. 在发行包目录打开 PowerShell。
@@ -120,5 +137,9 @@ PixInsight 许可证创建本地身份，并在自己的电脑上签名 DLL。
 - Local Signing Edition 使用 `package-local-release.ps1` 打包。
 - 公开打包必须显式传入 `-ModelDistributionAuthorized`。
 - 使用 `publish-local-release.ps1 -ConfirmPublicRelease` 发布 GitHub Release。
+- 同时发布完整 ZIP、小型 setup ZIP 和列出两个 ZIP 的 `SHA256SUMS-local.txt`。
+- 完整包包含 `package-manifest.json`；安装前验证逐文件 SHA-256。
+- 安装器变更运行 `test/installer-smoke.ps1` 和实际包的 `-CheckOnly`，兼容 Windows PowerShell 5.1。
+- Release 打包会使用 `tools/sanitize-release-model.py` 生成去标识化模型副本，保留输入输出接口和权重数值；打包机需要可导入 `onnx` 的 Python，可执行 `python -m pip install onnx` 准备环境。
 - 取得 CPD 身份后，使用 `package-release.ps1` 和 `publish-release.ps1`
   发布 Manage Repositories 版本。

@@ -11,6 +11,8 @@ param(
 
     [string]$BackendRoot,
 
+    [string]$OnnxPythonPath,
+
     [string]$RepositoryOwner = 'Indigo2233',
 
     [string]$RepositoryName = '3XT-ALT',
@@ -127,6 +129,8 @@ $modelsDirectory = Join-Path $engineDirectory 'models'
 $toolsDirectory = Join-Path $backendDirectory 'tools'
 $runtimeDirectory = Join-Path $backendDirectory 'runtime'
 $sitePackagesDirectory = Join-Path $runtimeDirectory 'Lib\site-packages'
+$modelSanitizer = Join-Path $moduleRoot 'tools\sanitize-release-model.py'
+$sourceModelsDirectory = Join-Path $BackendRoot 'engine\models'
 $documentationDirectory = Join-Path $stageFull 'doc\docs\XTAlt'
 
 foreach ($directory in @(
@@ -144,9 +148,23 @@ Copy-Item -LiteralPath $SignaturePath -Destination (Join-Path $binDirectory 'XTA
 Copy-Item -LiteralPath (Join-Path $BackendRoot 'catalog.json') -Destination $backendDirectory -Force
 Copy-Item -LiteralPath (Join-Path $BackendRoot 'engine\run_models.py') -Destination $engineDirectory -Force
 Copy-Item -LiteralPath (Join-Path $BackendRoot 'tools\xt_alt_worker.py') -Destination $toolsDirectory -Force
-
+if (-not (Test-Path -LiteralPath $modelSanitizer -PathType Leaf)) {
+    throw "Release model sanitizer was not found: $modelSanitizer"
+}
+if ([string]::IsNullOrWhiteSpace($OnnxPythonPath)) {
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -eq $pythonCommand) {
+        throw 'Python with the onnx package is required to prepare sanitized release models.'
+    }
+    $OnnxPythonPath = $pythonCommand.Source
+}
 foreach ($modelName in @('InDeConv.onnx', 'InDeNoise.onnx', 'InDeStars.onnx')) {
-    Copy-Item -LiteralPath (Join-Path $BackendRoot "engine\models\$modelName") -Destination $modelsDirectory -Force
+    $sourceModel = Join-Path $sourceModelsDirectory $modelName
+    $destinationModel = Join-Path $modelsDirectory $modelName
+    & $OnnxPythonPath -B -X utf8 $modelSanitizer --source $sourceModel --destination $destinationModel
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to sanitize release model: $modelName"
+    }
 }
 
 $runtimeSource = Join-Path $BackendRoot 'runtime'
@@ -233,6 +251,11 @@ print(json.dumps(result, ensure_ascii=False))
 if ($LASTEXITCODE -ne 0) {
     throw 'The staged XTAlt backend failed its ONNX session validation.'
 }
+
+Get-ChildItem -LiteralPath $stageFull -Directory -Filter '__pycache__' -Recurse -Force -ErrorAction SilentlyContinue |
+    Remove-Item -Recurse -Force
+Get-ChildItem -LiteralPath $stageFull -File -Filter '*.pyc' -Recurse -Force -ErrorAction SilentlyContinue |
+    Remove-Item -Force
 
 if (Test-Path -LiteralPath $archive) {
     Remove-Item -LiteralPath $archive -Force

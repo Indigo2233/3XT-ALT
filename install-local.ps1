@@ -10,10 +10,17 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $packageRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $packageRoot 'installer-common.ps1')
 $sourceDll = Join-Path $packageRoot 'XTAlt-pxm.dll'
 $sourceBackend = Join-Path $packageRoot 'XTAltBackend'
 $sourceTest = Join-Path $packageRoot 'test\native-selftest.js'
 $pixInsightExe = Join-Path $PixInsightRoot 'bin\PixInsight.exe'
+
+Assert-XTAltDestination $Destination $packageRoot $PixInsightRoot
+Test-XTAltPackage $packageRoot
+if ((Get-XTAltPEMachine $pixInsightExe) -ne 0x8664) {
+    throw 'This package requires x64 PixInsight.'
+}
 
 foreach ($path in @($sourceDll, $sourceTest, $pixInsightExe, $KeysFile)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -40,6 +47,9 @@ foreach ($relativePath in $requiredBackendFiles) {
 }
 
 $keysFullPath = (Resolve-Path -LiteralPath $KeysFile).Path
+if ([IO.Path]::GetExtension($keysFullPath) -ine '.xssk') {
+    throw 'KeysFile must be a PixInsight .xssk file.'
+}
 if ($keysFullPath -match '[^\x00-\x7F]') {
     throw 'The .xssk path must contain ASCII characters only because the PixInsight Windows signing command cannot decode this path safely.'
 }
@@ -87,6 +97,11 @@ try {
         throw 'The generated PixInsight signature has an unrecognized format.'
     }
 
+    # A user may have started PixInsight while the signing dialog was open.
+    if (Get-Process PixInsight -ErrorAction SilentlyContinue) {
+        throw 'Close all PixInsight windows and run setup again before replacing installed files.'
+    }
+
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
     Copy-Item -LiteralPath $stageDll -Destination (Join-Path $Destination 'XTAlt-pxm.dll') -Force
     Copy-Item -LiteralPath $stageSignature -Destination (Join-Path $Destination 'XTAlt-pxm.xsgn') -Force
@@ -100,6 +115,10 @@ try {
     $testDestination = Join-Path $Destination 'test'
     New-Item -ItemType Directory -Path $testDestination -Force | Out-Null
     Copy-Item -LiteralPath $sourceTest -Destination $testDestination -Force
+
+    $docsDestination = Join-Path $Destination 'docs'
+    New-Item -ItemType Directory -Path $docsDestination -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $packageRoot 'docs\INSTALL.zh-CN.md') -Destination $docsDestination -Force
 
     Write-Host "Installed module: $(Join-Path $Destination 'XTAlt-pxm.dll')"
     Write-Host "Installed signature: $(Join-Path $Destination 'XTAlt-pxm.xsgn')"

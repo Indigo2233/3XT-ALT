@@ -8,6 +8,8 @@ param(
 
     [string]$BackendRoot,
 
+    [string]$OnnxPythonPath,
+
     [switch]$ModelDistributionAuthorized
 )
 
@@ -49,6 +51,9 @@ $packageBaseName = "XTAlt-$Version-local-windows-x64"
 $stage = Join-Path $releaseRoot $packageBaseName
 $archive = Join-Path $releaseRoot ($packageBaseName + '.zip')
 $checksums = Join-Path $releaseRoot 'SHA256SUMS-local.txt'
+$setupBaseName = "XTAlt-$Version-setup-windows"
+$setupStage = Join-Path $releaseRoot $setupBaseName
+$setupArchive = Join-Path $releaseRoot ($setupBaseName + '.zip')
 $releaseRootFull = [IO.Path]::GetFullPath($releaseRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
 $stageFull = [IO.Path]::GetFullPath($stage)
 if (-not $stageFull.StartsWith($releaseRootFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -65,6 +70,8 @@ $modelsDirectory = Join-Path $engineDirectory 'models'
 $toolsDirectory = Join-Path $backendDirectory 'tools'
 $runtimeDirectory = Join-Path $backendDirectory 'runtime'
 $sitePackagesDirectory = Join-Path $runtimeDirectory 'Lib\site-packages'
+$modelSanitizer = Join-Path $moduleRoot 'tools\sanitize-release-model.py'
+$sourceModelsDirectory = Join-Path $BackendRoot 'engine\models'
 $docsDirectory = Join-Path $stageFull 'docs'
 $testDirectory = Join-Path $stageFull 'test'
 foreach ($directory in @($modelsDirectory, $toolsDirectory, $sitePackagesDirectory, $docsDirectory, $testDirectory)) {
@@ -75,8 +82,23 @@ Copy-Item -LiteralPath $DllPath -Destination (Join-Path $stageFull 'XTAlt-pxm.dl
 Copy-Item -LiteralPath (Join-Path $BackendRoot 'catalog.json') -Destination $backendDirectory -Force
 Copy-Item -LiteralPath (Join-Path $BackendRoot 'engine\run_models.py') -Destination $engineDirectory -Force
 Copy-Item -LiteralPath (Join-Path $BackendRoot 'tools\xt_alt_worker.py') -Destination $toolsDirectory -Force
+if (-not (Test-Path -LiteralPath $modelSanitizer -PathType Leaf)) {
+    throw "Release model sanitizer was not found: $modelSanitizer"
+}
+if ([string]::IsNullOrWhiteSpace($OnnxPythonPath)) {
+    $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if ($null -eq $pythonCommand) {
+        throw 'Python with the onnx package is required to prepare sanitized release models.'
+    }
+    $OnnxPythonPath = $pythonCommand.Source
+}
 foreach ($modelName in @('InDeConv.onnx', 'InDeNoise.onnx', 'InDeStars.onnx')) {
-    Copy-Item -LiteralPath (Join-Path $BackendRoot "engine\models\$modelName") -Destination $modelsDirectory -Force
+    $sourceModel = Join-Path $sourceModelsDirectory $modelName
+    $destinationModel = Join-Path $modelsDirectory $modelName
+    & $OnnxPythonPath -B -X utf8 $modelSanitizer --source $sourceModel --destination $destinationModel
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to sanitize release model: $modelName"
+    }
 }
 
 $runtimeSource = Join-Path $BackendRoot 'runtime'
@@ -112,6 +134,9 @@ foreach ($pattern in $sitePackagePatterns) {
 }
 
 Copy-Item -LiteralPath (Join-Path $moduleRoot 'install-local.ps1') -Destination $stageFull -Force
+foreach ($installerFile in @('Install-Windows.cmd', 'setup-windows.ps1', 'installer-common.ps1')) {
+    Copy-Item -LiteralPath (Join-Path $moduleRoot $installerFile) -Destination $stageFull -Force
+}
 Copy-Item -LiteralPath (Join-Path $moduleRoot 'AGENTS.md') -Destination $stageFull -Force
 Copy-Item -LiteralPath (Join-Path $moduleRoot 'README.md') -Destination $stageFull -Force
 Copy-Item -LiteralPath (Join-Path $moduleRoot 'NOTICE.md') -Destination $stageFull -Force
@@ -150,18 +175,60 @@ if ($LASTEXITCODE -ne 0) {
     throw 'The staged XTAlt backend failed its ONNX session validation.'
 }
 
+Get-ChildItem -LiteralPath $stageFull -Directory -Filter '__pycache__' -Recurse -Force -ErrorAction SilentlyContinue |
+    Remove-Item -Recurse -Force
+Get-ChildItem -LiteralPath $stageFull -File -Filter '*.pyc' -Recurse -Force -ErrorAction SilentlyContinue |
+    Remove-Item -Force
+
 if (Get-ChildItem -LiteralPath $stageFull -Filter '*.xsgn' -File -Recurse) {
     throw 'Local signature files must not be included in a public release.'
 }
+if (Get-ChildItem -LiteralPath $stageFull -Filter '*.xssk' -File -Recurse) {
+    throw 'Private keys must not be included in a public release.'
+}
+
+# Hash each extracted file so the offline installer can also check integrity.
+$manifestFiles = @(Get-ChildItem -LiteralPath $stageFull -File -Recurse | Sort-Object FullName | ForEach-Object {
+    @{
+        path = $_.FullName.Substring($stageFull.Length + 1).Replace('\', '/')
+        sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+})
+@{ schema = 1; platform = 'windows-x64'; version = $Version; files = $manifestFiles } |
+    ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stageFull 'package-manifest.json') -Encoding UTF8
 if (Test-Path -LiteralPath $archive) {
     Remove-Item -LiteralPath $archive -Force
 }
 Compress-Archive -Path (Join-Path $stageFull '*') -DestinationPath $archive -CompressionLevel Optimal
 $sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-Set-Content -LiteralPath $checksums -Encoding ASCII -Value ("{0}  {1}" -f $sha256, (Split-Path -Leaf $archive))
+
+# Small bootstrap download: no model/runtime files, uses the same setup UI.
+$setupStageFull = [IO.Path]::GetFullPath($setupStage)
+if (-not $setupStageFull.StartsWith($releaseRootFull + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'The setup staging directory resolved outside release.'
+}
+if (Test-Path -LiteralPath $setupStageFull) { Remove-Item -LiteralPath $setupStageFull -Recurse -Force }
+New-Item -ItemType Directory -Path $setupStageFull -Force | Out-Null
+foreach ($installerFile in @('Install-Windows.cmd', 'setup-windows.ps1', 'installer-common.ps1')) {
+    Copy-Item -LiteralPath (Join-Path $moduleRoot $installerFile) -Destination $setupStageFull -Force
+}
+# Remember the packaged version even if the source default changes later.
+$setupScriptPath = Join-Path $setupStageFull 'setup-windows.ps1'
+$setupScript = Get-Content -LiteralPath $setupScriptPath -Raw
+$setupScript.Replace("[string]`$ReleaseTag = 'v1.0.1-local'", "[string]`$ReleaseTag = 'v$Version-local'") |
+    Set-Content -LiteralPath $setupScriptPath -Encoding ASCII
+Copy-Item -LiteralPath (Join-Path $moduleRoot 'docs\INSTALL.zh-CN.md') -Destination $setupStageFull -Force
+if (Test-Path -LiteralPath $setupArchive) { Remove-Item -LiteralPath $setupArchive -Force }
+Compress-Archive -Path (Join-Path $setupStageFull '*') -DestinationPath $setupArchive -CompressionLevel Optimal
+$setupSha = (Get-FileHash -LiteralPath $setupArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath $checksums -Encoding ASCII -Value @(
+    ("{0}  {1}" -f $sha256, (Split-Path -Leaf $archive)),
+    ("{0}  {1}" -f $setupSha, (Split-Path -Leaf $setupArchive))
+)
 
 $archiveInfo = Get-Item -LiteralPath $archive
 Write-Host "Local signing release archive: $archive"
 Write-Host ("Archive size: {0:N2} MiB" -f ($archiveInfo.Length / 1MB))
 Write-Host "SHA-256: $sha256"
 Write-Host "Checksums: $checksums"
+Write-Host "Double-click setup archive: $setupArchive"

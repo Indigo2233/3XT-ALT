@@ -20,6 +20,10 @@ Identity 在本机签名 DLL，即可安装完整的三个 Process 和 Real-Time
 标准 Manage Repositories 一键安装仍需要 Certified PixInsight Developer（CPD）签名。
 详细范围参见 [NOTICE.md](NOTICE.md)。
 
+**当前安装包支持 Windows x64。macOS Apple Silicon / Intel 安装包尚未构建和验证。**
+ONNX 模型文件可以共用，Mac 所需的原生模块与运行环境需要分别适配。
+架构对应关系见[安装说明](docs/INSTALL.zh-CN.md#macosapple-silicon-与-intel)。
+
 桌面版附带的 Siril 脚本使用模型名称命名：`InDeConv.py`、`InDeStars.py` 和
 `InDeNoise.py`，分别对应反卷积、去星和降噪功能。
 
@@ -27,48 +31,32 @@ Identity 在本机签名 DLL，即可安装完整的三个 Process 和 Real-Time
 
 ### Local Signing Edition
 
-1. 从 [GitHub Releases](https://github.com/Indigo2233/3XT-ALT/releases) 下载：
+1. 下载[小型 Windows 安装入口](https://github.com/Indigo2233/3XT-ALT/releases/download/v1.0.1-local/XTAlt-1.0.1-setup-windows.zip)。
+2. 全部解压，双击 `Install-Windows.cmd`。
+3. 按向导选择 PixInsight 和自己的 `.xssk` 文件。首次使用会引导生成并注册本地身份。
+4. 保存图像并退出 PixInsight；向导自动下载、校验并安装完整包，在官方窗口输入签名密码。
+5. 在 `Process > Modules > Install Modules` 中选择向导显示的安装目录，点击 `Search` 和 `Install`，然后重启。
 
-   - `XTAlt-<版本>-local-windows-x64.zip`
-   - `SHA256SUMS-local.txt`
+无需另装 Python、配置模型路径或编译源码。三个 Process 共用一个模块，安装一次即可。
+下载、校验、路径选择和文件安装已自动化；首次密钥生成、身份注册、密码输入和模块扫描由用户完成。
 
-2. 校验 SHA-256，解压 ZIP。
-3. 创建并注册自己的 PixInsight Local Signing Identity。
-4. 退出 PixInsight，在解压目录运行：
+**还没有 `.xssk`？** 打开 `Script > Development > SigningKeys`，勾选
+`Generate Signing Keys` 和 `Local signing identity`，在 `Output` 选择 `local.xssk`
+保存位置并设置密码，点击 `Run`。然后通过 `Edit > Local Signing Identity` 注册该文件，
+勾选 `Make the local signing identity persistent`。
+完整的逐项填写说明、密码要求、路径示例见[安装说明](docs/INSTALL.zh-CN.md#首次生成-xssk按界面逐项填写)。
 
-   ```powershell
-   .\install-local.ps1 -KeysFile "C:\path\PixInsight-local-signing.xssk"
-   ```
-
-5. 在密码窗口中亲自输入签名密码。
-6. 启动 PixInsight，在 `Process > Modules > Install Modules` 中选择：
-
-   ```text
-   %LOCALAPPDATA%\Programs\XTAlt
-   ```
-
-7. 重启 PixInsight，在 `Process > XTAlt` 中打开三个 Process。
+离线使用：[下载完整包](https://github.com/Indigo2233/3XT-ALT/releases/download/v1.0.1-local/XTAlt-1.0.1-local-windows-x64.zip)，
+依据 [SHA256SUMS-local.txt](https://github.com/Indigo2233/3XT-ALT/releases/download/v1.0.1-local/SHA256SUMS-local.txt)
+校验后全部解压，双击相同入口。完整包内的向导使用本地文件。
 
 适合交给 Codex 或其他本地编程代理执行的完整规范位于 [AGENTS.md](AGENTS.md)，
 人工安装与验证步骤位于 [docs/INSTALL.zh-CN.md](docs/INSTALL.zh-CN.md)。
 
 ### Manage Repositories
 
-取得 CPD 签名后，用户可以通过 PixInsight 更新系统安装：
-
-1. 打开 `Resources > Updates > Manage Repositories`。
-2. 添加以下仓库 URL，保留末尾的 `/`：
-
-   ```text
-   https://raw.githubusercontent.com/Indigo2233/3XT-ALT/main/
-   ```
-
-3. 执行 `Resources > Updates > Check for Updates`，选择 `3XT-ALT` 更新。
-4. 下载完成后退出 PixInsight，由更新程序安装并自动重新启动。
-5. 在 `Process > XTAlt` 中打开 `BXTAlt`、`SXTAlt` 或 `NXTAlt`。
-
-更新包会将模块安装到 PixInsight 的 `bin` 目录，并将自包含后端安装到
-`bin/XTAltBackend`。无需额外安装 Python 或手工复制模型。
+当前尚未启用。取得有效 CPD 签名并发布签名仓库描述文件后，可以通过 PixInsight 更新系统
+分发各平台模块与后端。当前用户请使用上方 Local Signing Edition 安装向导。
 
 开发或兼容旧版安装时，也可以在启动 PixInsight 前设置环境变量
 `LFT_INSTALL_DIR`。旧版默认后端目录为：
@@ -121,6 +109,12 @@ Windows x64 构建要求：
 ```
 
 发布包不包含 `.xsgn`，每位用户在本机运行 `install-local.ps1` 生成自己的签名。
+打包机需要可导入 `onnx` 的 Python，可用 `-OnnxPythonPath` 指定；发布模型由去标识化工具生成副本。
+打包同时生成小型安装入口、完整离线包、完整包内的逐文件哈希清单，以及两个 ZIP 的 SHA-256。
+发布脚本会更新这三个 Release 资产。
+
+安装器维护时运行 `test/installer-smoke.ps1`；用 Windows PowerShell 5.1 执行
+`setup-windows.ps1 -CheckOnly -PackageDirectory <完整包目录>` 验证实际发行包。
 
 ### CPD / Manage Repositories
 

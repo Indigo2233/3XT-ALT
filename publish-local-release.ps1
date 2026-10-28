@@ -13,6 +13,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $moduleRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+. (Join-Path $moduleRoot 'installer-common.ps1')
 if ([string]::IsNullOrWhiteSpace($ReleaseTag)) {
     $ReleaseTag = "v$Version-local"
 }
@@ -23,16 +24,19 @@ if (-not $ConfirmPublicRelease) {
 $archiveName = "XTAlt-$Version-local-windows-x64.zip"
 $archive = Join-Path $moduleRoot "release\$archiveName"
 $checksums = Join-Path $moduleRoot 'release\SHA256SUMS-local.txt'
-foreach ($path in @($archive, $checksums)) {
+$setupArchive = Join-Path $moduleRoot "release\XTAlt-$Version-setup-windows.zip"
+foreach ($path in @($archive, $setupArchive, $checksums)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Required release artifact was not found: $path"
     }
 }
 
 $checksumLine = Get-Content -LiteralPath $checksums -Raw
-$sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($checksumLine -notmatch ('^' + [regex]::Escape($sha256) + '\s+' + [regex]::Escape($archiveName) + '\s*$')) {
-    throw 'The release archive SHA-256 does not match SHA256SUMS-local.txt.'
+foreach ($asset in @($archive, $setupArchive)) {
+    $expected = Get-XTAltExpectedHash $checksumLine (Split-Path -Leaf $asset)
+    if ((Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash -ine $expected) {
+        throw "Release asset checksum mismatch: $asset"
+    }
 }
 
 & gh auth status | Out-Host
@@ -45,21 +49,33 @@ $notes = @"
 
 This package contains BXT-ALT, SXT-ALT and NXT-ALT, the self-contained inference runtime, and the project-owned InDeConv, InDeNoise and InDeStars models.
 
-Each user must sign XTAlt-pxm.dll with their own PixInsight Local Signing Identity before installation. Download the ZIP and SHA256SUMS-local.txt, verify the checksum, then follow AGENTS.md or docs/INSTALL.zh-CN.md in the package.
+Recommended: download XTAlt-$Version-setup-windows.zip, extract it, and double-click Install-Windows.cmd. The wizard locates PixInsight, guides first-time local signing setup, downloads and verifies the complete package, and installs the module and backend. Select your .xssk file and enter the signing password only in PixInsight. Finish with Process > Modules > Install Modules and restart PixInsight.
+
+For offline installation, download XTAlt-$Version-local-windows-x64.zip and SHA256SUMS-local.txt. Verify the ZIP checksum, extract it, and double-click Install-Windows.cmd. Both ZIP checksums are listed in SHA256SUMS-local.txt.
+
+Detailed signing-key and installation instructions: https://github.com/$Repository/blob/main/docs/INSTALL.zh-CN.md
+
+Windows x64 is currently supported. macOS Intel and Apple Silicon packages are not yet available. The three ONNX model files can be shared across platforms; macOS native modules and runtimes require separate builds and validation.
 
 This release cannot be installed through Manage Repositories because the module does not carry a Certified PixInsight Developer signature.
 "@
 
-& gh release view $ReleaseTag --repo $Repository *> $null
-if ($LASTEXITCODE -eq 0) {
-    & gh release upload $ReleaseTag $archive $checksums --repo $Repository --clobber
-    & gh release edit $ReleaseTag --repo $Repository --title "3XT-ALT $Version Local Signing Edition" --notes $notes
+$notesFile = Join-Path ([IO.Path]::GetTempPath()) ('xtalt-release-notes-' + [guid]::NewGuid().ToString('N') + '.txt')
+try {
+    [IO.File]::WriteAllText($notesFile, $notes, (New-Object Text.UTF8Encoding($false)))
+    & gh release view $ReleaseTag --repo $Repository *> $null
+    if ($LASTEXITCODE -eq 0) {
+        & gh release upload $ReleaseTag $archive $setupArchive $checksums --repo $Repository --clobber
+        if ($LASTEXITCODE -ne 0) { throw 'Release asset upload failed; release notes were not changed.' }
+        & gh release edit $ReleaseTag --repo $Repository --title "3XT-ALT $Version Local Signing Edition" --notes-file $notesFile
+    }
+    else {
+        & gh release create $ReleaseTag $archive $setupArchive $checksums --repo $Repository --title "3XT-ALT $Version Local Signing Edition" --notes-file $notesFile
+    }
+    if ($LASTEXITCODE -ne 0) { throw 'GitHub Release publication failed.' }
 }
-else {
-    & gh release create $ReleaseTag $archive $checksums --repo $Repository --title "3XT-ALT $Version Local Signing Edition" --notes $notes
-}
-if ($LASTEXITCODE -ne 0) {
-    throw 'GitHub Release publication failed.'
+finally {
+    if (Test-Path -LiteralPath $notesFile -PathType Leaf) { Remove-Item -LiteralPath $notesFile -Force }
 }
 
 Write-Host "Published GitHub Release: https://github.com/$Repository/releases/tag/$ReleaseTag"
