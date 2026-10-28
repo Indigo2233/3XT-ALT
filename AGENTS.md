@@ -2,7 +2,7 @@
 
 ## 目标
 
-在 Windows x64 和 PixInsight 1.9.x 上安装 GitHub Release 提供的
+在 Windows x64 或 macOS arm64/x86_64 上安装 GitHub Release 提供的
 3XT-ALT Local Signing Edition，并验证以下原生 Process：
 
 - `BXTAlt` / `BXT-ALT`
@@ -10,9 +10,9 @@
 - `NXTAlt` / `NXT-ALT`
 
 当前公开版本使用 PixInsight Local Signing Identity。每位用户需要使用自己的
-PixInsight 许可证创建本地身份，并在自己的电脑上签名 DLL。
-当前支持 Windows x64。macOS arm64/x86_64 模块和运行环境尚未发布；
-不得将 ONNX 权重可跨平台使用表述为已支持 Mac 原生 Process。
+PixInsight 许可证创建本地身份，并在自己的电脑上签名模块。
+Windows 沿用下方安装流程；macOS 14+ 使用本文的 macOS 流程，建议 PixInsight 1.9.5。
+Mac 的 CI 模型/打包测试与真实 PixInsight 签名、加载、RTP 验证必须分别记录。
 
 ## 安全要求
 
@@ -23,8 +23,32 @@ PixInsight 许可证创建本地身份，并在自己的电脑上签名 DLL。
 - PixInsight 显示密码窗口时，暂停自动化并让用户亲自输入密码。
 - 禁止把 `.onnx`、`.xssk`、`.xsgn`、DLL、运行时或模型分析中间文件提交到 Git。
 - 保留用户当前打开的图像、Preview、Process Icon 和参数。
+- 禁止修改父级原始安装目录的 `engine/run_models.py`。跨平台桥接逻辑维护在仓库的 `backend/tools/`。
+- macOS `.dylib`、`.so`、静态库及运行环境同样只通过发行资产分发。
+
+## macOS 安装流程
+
+1. 阅读 [docs/INSTALL-macOS.zh-CN.md](docs/INSTALL-macOS.zh-CN.md)。系统需 macOS 14+。
+2. 使用 `lipo -archs <PixInsight.app>/Contents/MacOS/PixInsight` 确认架构。
+   arm64 与 x86_64 必须匹配 PixInsight；Rosetta 模式明确指定 `--arch x86_64`。
+3. 下载 `XTAlt-1.0.1-setup-macos.zip`，解压后运行 `Install-macOS.command`。
+   完整离线包为 `XTAlt-1.0.1-local-macos-<arch>.tar.gz`，使用同架构的
+   `SHA256SUMS-macos-<arch>.txt` 校验。小型入口有独立 `SHA256SUMS-setup-macos.txt`。
+4. 初次使用通过官方 SigningKeys 创建并在 Local Signing Identity 中注册 `.xssk`。
+   代理只传递私钥文件路径；用户亲自输入密码。
+5. 只读预检使用 `bash setup-macos.sh --check-only --pixinsight-app <app路径>`。
+   安装前保存并退出 PixInsight，安装器暂存并校验文件、本地签名成功后替换目标目录，保留旧版本备份。
+6. 默认安装目录 `~/Library/Application Support/XTAlt`。在 Install Modules 扫描并安装模块后重启。
+7. 执行安装目录的 `test/native-selftest.js`，随后检查原图切换、参数更新、会话复用和 RTP。
+8. 默认 `Auto (CPU)`。Core ML 为实验路径，不能宣称已验证 GPU/ANE 性能。
+
+Mac 包含 `XTAlt-pxm.dylib`、`XTAltBackend/runtime/bin/python3`、三个模型以及
+`tools/xt_alt_worker.py` 和 `tools/xt_alt_runtime.py`。Apple ad-hoc 签名与 PixInsight
+本地签名是两项独立检查。仅对已通过校验的 XTAlt 暂存包清除隔离属性，保留系统安全设置。
 
 ## 安装前检查
+
+以下章节适用于 Windows。
 
 1. 确认系统为 Windows x64，并已安装 PixInsight 1.9.x；官方 SigningKeys 若要求更新版本，先引导用户升级。
 2. 确认发行包包含：
@@ -143,3 +167,7 @@ PixInsight 许可证创建本地身份，并在自己的电脑上签名 DLL。
 - Release 打包会使用 `tools/sanitize-release-model.py` 生成去标识化模型副本，保留输入输出接口和权重数值；打包机需要可导入 `onnx` 的 Python，可执行 `python -m pip install onnx` 准备环境。
 - 取得 CPD 身份后，使用 `package-release.ps1` 和 `publish-release.ps1`
   发布 Manage Repositories 版本。
+- macOS 使用 `build-macos.sh` 和 `tools/package-macos.py --model-distribution-authorized`；
+  通过 GitHub `macOS packages` 工作流进行双架构构建和验证，再发布产物。
+- `tools/package-macos-launcher.py` 生成跨架构小型安装入口；Mac 校验文件使用独立名称，
+  不覆盖既有 Windows ZIP 或 `SHA256SUMS-local.txt`。

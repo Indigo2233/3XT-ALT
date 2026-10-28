@@ -69,6 +69,8 @@ if [[ ! -f "$PACKAGE/XTAlt-pxm.dylib" ]]; then
   PACKAGE="$EXTRACT/$NAME"
 fi
 PACKAGE="$(cd "$PACKAGE" && pwd -P)"
+PRIVATE_FILES="$(find "$PACKAGE" \( -iname '*.xssk' -o -iname '*.xsgn' \) -print -quit)"
+[[ -z "$PRIVATE_FILES" ]] || fail '请将个人密钥和签名保存在发行包之外，再重新运行。'
 [[ "$(cat "$PACKAGE/architecture.txt")" == "$ARCH" ]] || fail '安装包架构与 PixInsight 不匹配，请下载匹配的完整包或小型安装入口。'
 echo '正在校验完整安装包…'
 [[ -s "$PACKAGE/package-sha256.txt" ]] || fail '缺少校验清单。'
@@ -79,6 +81,7 @@ fi
 rm -f "$VERIFY_LOG"
 while IFS=$'\t' read -r target relative; do
   [[ -n "$relative" ]] || continue
+  [[ "$target" != /* ]] || fail "Absolute symlink: $relative"
   [[ -L "$PACKAGE/$relative" && "$(readlink "$PACKAGE/$relative")" == "$target" ]] || fail "Symlink mismatch: $relative"
   target_directory="$(cd "$(dirname "$PACKAGE/$relative")/$(dirname "$target")" && pwd -P)"
   [[ "$target_directory/" == "$PACKAGE/"* ]] || fail "External symlink: $relative"

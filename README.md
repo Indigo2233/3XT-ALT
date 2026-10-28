@@ -16,20 +16,21 @@ Real-Time Preview。图像数据通过内存管道与本地 Python/ONNX 后端�
 精简运行时通过 GitHub Release 资产分发，避免将大型二进制写入 Git 历史。
 
 当前公开版本为 Local Signing Edition。每位用户使用自己的 PixInsight Local Signing
-Identity 在本机签名 DLL，即可安装完整的三个 Process 和 Real-Time Preview。
+Identity 在本机签名模块，即可安装完整的三个 Process 和 Real-Time Preview。
 标准 Manage Repositories 一键安装仍需要 Certified PixInsight Developer（CPD）签名。
 详细范围参见 [NOTICE.md](NOTICE.md)。
 
-**当前安装包支持 Windows x64。macOS Apple Silicon / Intel 安装包尚未构建和验证。**
-ONNX 模型文件可以共用，Mac 所需的原生模块与运行环境需要分别适配。
-架构对应关系见[安装说明](docs/INSTALL.zh-CN.md#macosapple-silicon-与-intel)。
+提供 Windows x64，以及 macOS Apple Silicon arm64 / Intel x86_64 的独立构建。
+Mac 要求 macOS 14+，使用 PCL 2.10.8 构建，建议搭配 PixInsight 1.9.5。
+Mac 的 CPU 模型推理和安装包由 CI 检查；PixInsight 内的签名、加载及实时预览仍需实机验证。
+详见 [macOS 安装与验证](docs/INSTALL-macOS.zh-CN.md)。
 
 桌面版附带的 Siril 脚本使用模型名称命名：`InDeConv.py`、`InDeStars.py` 和
 `InDeNoise.py`，分别对应反卷积、去星和降噪功能。
 
 ## 用户安装
 
-### Local Signing Edition
+### Windows：Local Signing Edition
 
 1. 下载[小型 Windows 安装入口](https://github.com/Indigo2233/3XT-ALT/releases/download/v1.0.1-local/XTAlt-1.0.1-setup-windows.zip)。
 2. 全部解压，双击 `Install-Windows.cmd`。
@@ -52,6 +53,16 @@ ONNX 模型文件可以共用，Mac 所需的原生模块与运行环境需要�
 
 适合交给 Codex 或其他本地编程代理执行的完整规范位于 [AGENTS.md](AGENTS.md)，
 人工安装与验证步骤位于 [docs/INSTALL.zh-CN.md](docs/INSTALL.zh-CN.md)。
+
+### macOS：Apple Silicon / Intel
+
+1. 下载[小型 Mac 安装入口](https://github.com/Indigo2233/3XT-ALT/releases/download/v1.0.1-local/XTAlt-1.0.1-setup-macos.zip)。
+2. 全部解压，双击 `Install-macOS.command`。安装器根据 PixInsight 的架构下载并校验完整包。
+3. 选择自己的 `.xssk`，在 PixInsight 官方窗口输入密码。
+4. 在 `Process > Modules > Install Modules` 中扫描 `~/Library/Application Support/XTAlt`，安装后重启。
+
+首次生成密钥、离线包、Rosetta、系统拦截处理与验证步骤见 [Mac 安装说明](docs/INSTALL-macOS.zh-CN.md)。
+两个架构的完整包均包含三个模型及全部 Python 依赖。默认使用 CPU；Core ML 为实验选项。
 
 ### Manage Repositories
 
@@ -86,6 +97,10 @@ Windows x64 构建要求：
 ```
 
 输出文件为 `build\bin\XTAlt-pxm.dll`。
+
+macOS 使用 Xcode 和 CMake，执行 `bash build-macos.sh`，输出
+`build/macos-arm64/bin/XTAlt-pxm.dylib` 或 `build/macos-x86_64/bin/XTAlt-pxm.dylib`。
+GitHub Actions 的 `macOS packages` 工作流分别编译两种架构、打包运行环境并执行模型测试。
 
 ## 本地开发签名
 

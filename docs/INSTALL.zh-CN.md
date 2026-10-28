@@ -4,6 +4,8 @@
 InDeConv / InDeNoise / InDeStars 模型和完整推理环境。用户无需安装 Python 或编译源码。
 三个 Process 封装在同一个模块中，一次模块安装即可使用全部功能。
 
+Mac 用户请阅读独立的 [macOS 安装说明](INSTALL-macOS.zh-CN.md)，使用 `Install-macOS.command`。
+
 ## 推荐：双击安装向导
 
 1. 打开 [v1.0.1-local Release](https://github.com/Indigo2233/3XT-ALT/releases/tag/v1.0.1-local)。
@@ -132,8 +134,8 @@ if ((Get-FileHash -LiteralPath $name -Algorithm SHA256).Hash -ine $expected) { t
 
 ## macOS、Apple Silicon 与 Intel
 
-当前 Release **仅包含 Windows x64 模块和运行环境**。macOS 安装包尚未构建和验证。
-上述 PowerShell/双击入口适用于 Windows。
+macOS 提供 arm64 与 x86_64 两套模块和运行环境，安装流程详见
+[macOS 安装与验证](INSTALL-macOS.zh-CN.md)。上述 PowerShell 入口适用于 Windows。
 
 三个 ONNX 模型的权重文件可以跨平台共用。需要按目标平台准备的是原生 Process 模块、
 Python、ONNX Runtime 及其本地依赖。
@@ -143,12 +145,11 @@ Python、ONNX Runtime 及其本地依赖。
 | Windows x64 | x64 `.dll` | Windows x64 |
 | macOS Apple Silicon 原生 | arm64 `.dylib` | macOS arm64 |
 | macOS Intel | x86_64 `.dylib` | macOS x86_64 |
-| Apple Silicon 上通过 Rosetta 运行 Intel 版 PixInsight | x86_64 `.dylib` | 可先配套 macOS x86_64 后端 |
+| Apple Silicon 上通过 Rosetta 运行 Intel 版 PixInsight | x86_64 `.dylib` | macOS x86_64 |
 
-macOS 模块可以分别发布两种架构，也可以构建同时包含两种架构的 Universal Binary。
-模块必须匹配 PixInsight 进程的架构；独立运行的推理后端可另行选型，但应验证完整组合。
-当前代码使用 Windows API 和 DirectML，Mac 移植需要适配这些位置。
-CPU 推理与 Core ML 加速的算子兼容性、输出误差和速度均需在对应 Mac 上验证。
+模块必须匹配 PixInsight 进程的架构。当前 Mac 安装包要求 macOS 14+，建议使用
+PixInsight 1.9.5。默认使用 CPU，Core ML 为实验选项。CI 覆盖 CPU 推理及安装包检查；
+PixInsight 界面、本地签名和 Real-Time Preview 需在装有许可证的 Mac 上进一步验证。
 
 macOS 中创建和注册 `.xssk` 的 PixInsight 菜单流程与上文相同。
 
