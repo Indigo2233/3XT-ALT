@@ -99,7 +99,20 @@ def main():
     for filename in ("native-selftest.js", "macos-smoke.py"):
         shutil.copy2(ROOT / "test" / filename, stage / "test")
     # Retain complete SDK legal notices and the Python/wheel licenses bundled upstream.
-    shutil.copytree(ROOT / "build" / "pcl-macos" / "etc" / "legal", stage / "licenses" / "PCL")
+    sdk = ROOT / "build" / "pcl-macos"
+    notices = stage / "licenses" / "PCL"
+    notices.mkdir(parents=True)
+    shutil.copy2(sdk / "LICENSE", notices / "LICENSE")
+    shutil.copy2(sdk / "COPYING.md", notices / "COPYING.md")
+    for dependency in ("lcms", "lz4", "zlib", "zstd"):
+        shutil.copy2(sdk / "src" / "3rdparty" / dependency / "LICENSE", notices / f"{dependency}-LICENSE")
+    shutil.copy2(sdk / "src/3rdparty/cminpack/CopyrightMINPACK.txt", notices)
+    # RFC6234 carries its license in source headers rather than a LICENSE file.
+    rfc_notices = notices / "RFC6234"
+    rfc_notices.mkdir()
+    for source in (sdk / "src/3rdparty/RFC6234").iterdir():
+        if source.suffix in (".c", ".h"):
+            shutil.copy2(source, rfc_notices)
     metadata = {"version": "1.0.1", "platform": "macos", "architecture": arch,
                 "minimumMacOS": "14.0", "pclCommit": "201860a364c05308cde8271f5ca517b69b487fa1",
                 "sourceCommit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
